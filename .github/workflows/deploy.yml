@@ -1,0 +1,38 @@
+name: Deploy PDFs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      # Pages caps each site at 1 GB, so the PDFs are split across repos; paths.txt lists this one's folders.
+      - name: Fetch this repo's PDFs from the source repo
+        run: |
+          git clone --filter=blob:none --no-checkout --depth 1 https://github.com/UBGHyper/thgilciffart.git src
+          sed 's#.*#/&/*.pdf#' paths.txt | git -C src sparse-checkout set --no-cone --stdin
+          git -C src checkout
+          mkdir _site
+          while IFS= read -r d; do mkdir -p "_site/$d" && cp "src/$d"/*.pdf "_site/$d/"; done < paths.txt
+          du -sh _site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
